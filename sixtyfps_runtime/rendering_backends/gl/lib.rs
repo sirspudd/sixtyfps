@@ -356,6 +356,7 @@ impl GLRenderingPrimitivesBuilder {
         let mut font_cache = self.font_cache.borrow_mut();
         let font = font_cache.find_font(font_family, pixel_size);
         let mut font = font.borrow_mut();
+        let ascent = font.metrics.ascent * font.pixel_size / font.metrics.units_per_em as f32;
         let glyphs =
             font.string_to_glyphs(&self.context, &mut self.texture_atlas.borrow_mut(), text);
 
@@ -363,26 +364,33 @@ impl GLRenderingPrimitivesBuilder {
 
         let glyph_runs = font
             .layout_glyphs(glyphs)
-            .map(|cached_glyph| {
-                let glyph_width =
-                    cached_glyph.glyph_allocation.sub_texture.texture_coordinates.width() as f32;
-                let glyph_height =
-                    cached_glyph.glyph_allocation.sub_texture.texture_coordinates.height() as f32;
+            .filter_map(|cached_glyph| {
+                let result = if let Some(glyph_allocation) = &cached_glyph.glyph_allocation {
+                    let glyph_width =
+                        glyph_allocation.sub_texture.texture_coordinates.width() as f32;
+                    let glyph_height =
+                        glyph_allocation.sub_texture.texture_coordinates.height() as f32;
 
-                let vertex1 = Vertex { _pos: [x, 0.] };
-                let vertex2 = Vertex { _pos: [x + glyph_width, 0.] };
-                let vertex3 = Vertex { _pos: [x + glyph_width, glyph_height] };
-                let vertex4 = Vertex { _pos: [x, glyph_height] };
+                    let glyph_x = x + cached_glyph.x;
+                    let glyph_y = cached_glyph.y + ascent;
 
-                let vertices = [vertex1, vertex2, vertex3, vertex1, vertex3, vertex4];
-                let texture_vertices =
-                    cached_glyph.glyph_allocation.sub_texture.normalized_coordinates;
+                    let vertex1 = Vertex { _pos: [glyph_x, glyph_y] };
+                    let vertex2 = Vertex { _pos: [glyph_x + glyph_width, glyph_y] };
+                    let vertex3 = Vertex { _pos: [glyph_x + glyph_width, glyph_y + glyph_height] };
+                    let vertex4 = Vertex { _pos: [glyph_x, glyph_y + glyph_height] };
 
-                let texture = cached_glyph.glyph_allocation.sub_texture.texture;
+                    let vertices = [vertex1, vertex2, vertex3, vertex1, vertex3, vertex4];
+                    let texture_vertices = glyph_allocation.sub_texture.normalized_coordinates;
+
+                    let texture = glyph_allocation.sub_texture.texture;
+                    Some((vertices, texture_vertices, texture))
+                } else {
+                    None
+                };
 
                 x += cached_glyph.advance;
 
-                (vertices, texture_vertices, texture)
+                result
             })
             .group_by(|(_, _, texture)| *texture)
             .into_iter()

@@ -6,15 +6,17 @@ use pathfinder_geometry::{
 };
 
 pub struct PreRenderedGlyph {
-    pub glyph_allocation: AtlasAllocation,
+    pub glyph_allocation: Option<AtlasAllocation>,
     pub advance: f32,
+    pub x: f32,
+    pub y: f32,
 }
 
 pub struct GLFont {
     font: font_kit::font::Font,
     glyphs: std::collections::hash_map::HashMap<u32, PreRenderedGlyph>,
     pub pixel_size: f32,
-    metrics: font_kit::metrics::Metrics,
+    pub metrics: font_kit::metrics::Metrics,
 }
 
 impl GLFont {
@@ -61,39 +63,60 @@ impl GLFont {
 
         let advance = self.font.advance(glyph_id).unwrap().x() * scale_from_font_units;
 
-        let baseline_y = self.metrics.ascent * scale_from_font_units;
         let hinting = font_kit::hinting::HintingOptions::None;
         let raster_opts = font_kit::canvas::RasterizationOptions::GrayscaleAa;
 
-        // ### TODO: #8 use tight bounding box for glyphs stored in texture atlas
-        let glyph_height =
-            (self.metrics.ascent - self.metrics.descent + 1.) * scale_from_font_units;
-        let glyph_width = advance;
-        let mut canvas = font_kit::canvas::Canvas::new(
-            Vector2I::new(glyph_width.ceil() as i32, glyph_height.ceil() as i32),
-            font_kit::canvas::Format::A8,
-        );
-        self.font
-            .rasterize_glyph(
-                &mut canvas,
-                glyph_id,
-                self.pixel_size,
-                Transform2F::from_translation(Vector2F::new(0., baseline_y)),
-                hinting,
-                raster_opts,
-            )
-            .unwrap();
+        let glyph_rect = self.font.typographic_bounds(glyph_id).unwrap();
 
-        let glyph_image =
-            image::ImageBuffer::from_fn(canvas.size.x() as u32, canvas.size.y() as u32, |x, y| {
+        let glyph_width = glyph_rect.width() * scale_from_font_units;
+        let glyph_height = glyph_rect.height() * scale_from_font_units;
+        let x = glyph_rect.origin_x() * scale_from_font_units;
+        let y = -(glyph_rect.origin_y() + glyph_rect.height()) * scale_from_font_units;
+
+        let glyph_allocation = if glyph_width > 0. && glyph_height > 0. {
+            let mut canvas = font_kit::canvas::Canvas::new(
+                Vector2I::new(glyph_width.ceil() as i32, glyph_height.ceil() as i32),
+                font_kit::canvas::Format::A8,
+            );
+            self.font
+                .rasterize_glyph(
+                    &mut canvas,
+                    glyph_id,
+                    self.pixel_size,
+                    Transform2F::from_translation(Vector2F::new(-x, -y.ceil() - 5.)),
+                    hinting,
+                    raster_opts,
+                )
+                .unwrap();
+
+            let mut glyph_image = image::ImageBuffer::from_pixel(
+                canvas.size.x() as u32,
+                canvas.size.y() as u32,
+                image::Rgba::<u8>::from_channels(0, 255, 0, 0),
+            );
+            for (x, y, pixel) in glyph_image.enumerate_pixels_mut() {
                 let idx = (x as usize) + (y as usize) * canvas.stride;
                 let alpha = canvas.pixels[idx];
-                image::Rgba::<u8>::from_channels(0, 0, 0, alpha)
-            });
+                *pixel = image::Rgba::<u8>::from_channels(0, 0, 0, alpha)
+            }
+            /*
+            let glyph_image = image::ImageBuffer::from_fn(
+                canvas.size.x() as u32,
+                canvas.size.y() as u32,
+                |x, y| {
+                    let idx = (x as usize) + (y as usize) * canvas.stride;
+                    let alpha = canvas.pixels[idx];
+                    image::Rgba::<u8>::from_channels(0, 0, 0, alpha)
+                },
+            );
+            */
 
-        let glyph_allocation = atlas.allocate_image_in_atlas(gl, glyph_image);
+            Some(atlas.allocate_image_in_atlas(gl, glyph_image))
+        } else {
+            None
+        };
 
-        PreRenderedGlyph { glyph_allocation, advance }
+        PreRenderedGlyph { glyph_allocation, advance, x, y }
     }
 }
 

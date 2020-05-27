@@ -41,6 +41,13 @@ Hello := Rectangle {
 
     color: white;
 
+    Text {
+        x: 10;
+        y: 100;
+        text: "Hello World";
+        color: black;
+    }
+
     TwoRectangle {
         width: 100;
         height: 100;
