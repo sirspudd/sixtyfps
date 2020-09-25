@@ -47,6 +47,7 @@ mod passes {
     pub mod collect_resources;
     pub mod compile_paths;
     pub mod deduplicate_property_read;
+    pub mod focus_item;
     pub mod inlining;
     pub mod lower_layout;
     pub mod lower_states;
@@ -131,6 +132,7 @@ pub fn run_passes(
     passes::deduplicate_property_read::deduplicate_property_read(&doc.root_component);
     passes::move_declarations::move_declarations(&doc.root_component, diag);
     passes::remove_aliases::remove_aliases(&doc.root_component, diag);
+    passes::focus_item::determine_initial_focus_item(&doc.root_component, diag);
     passes::resolve_native_classes::resolve_native_classes(&doc.root_component);
 }
 

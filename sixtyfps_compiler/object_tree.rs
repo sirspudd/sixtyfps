@@ -100,6 +100,9 @@ pub struct Component {
     /// When creating this component and inserting "children", append them to the children of
     /// the element pointer to by this field.
     pub child_insertion_point: RefCell<Option<ElementRc>>,
+
+    /// Code to be inserted into the constructor
+    pub setup_code: RefCell<Vec<Expression>>,
 }
 
 impl Component {
@@ -199,6 +202,12 @@ pub struct RepeatedElementInfo {
 }
 
 pub type ElementRc = Rc<RefCell<Element>>;
+
+impl PartialEq for Element {
+    fn eq(&self, other: &Self) -> bool {
+        std::ptr::eq(self, other)
+    }
+}
 
 impl Element {
     pub fn from_node(
